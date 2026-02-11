@@ -1,0 +1,92 @@
+import pandas as pd
+
+# Load the datasets
+df_suspects = pd.read_csv('suspects.csv')
+df_transactions = pd.read_csv('transactions.csv')
+
+print("--- Suspects Head ---")
+print(df_suspects.head())
+
+print("\n--- Transactions Head ---")
+print(df_transactions.head())
+
+print("--- Suspects Info ---")
+df_suspects.info()
+
+print("\n--- Transactions Info ---")
+df_transactions.info()
+
+# Check bounds for transactions (e.g., amount, dates)
+print("--- Transactions Bounds ---")
+print(df_transactions.describe(include='all'))
+
+# Convert the date column in transactions to datetime
+df_transactions['date'] = pd.to_datetime(df_transactions['date'])
+
+# If df_suspects or other dataframes have date columns (e.g., 'registration_date'),
+# you would convert them here as well.
+# Verify the data types
+print(df_transactions.info())
+
+# --- Step 3: Missing Value Check ---
+print("Missing values per column:")
+print(df_transactions.isnull().sum())
+
+# Let's actually look at those 7 suspicious transactions
+missing_category = df_transactions[df_transactions['category'].isnull()]
+print("\nTransactions with missing categories:")
+print(missing_category)
+
+# --- Step 4: Outlier Check (Amount) ---
+# Statistical check using the IQR method
+Q1 = df_transactions['amount'].quantile(0.25)
+Q3 = df_transactions['amount'].quantile(0.75)
+IQR = Q3 - Q1
+
+lower_bound = Q1 - 1.5 * IQR
+upper_bound = Q3 + 1.5 * IQR
+
+outliers = df_transactions[(df_transactions['amount'] < lower_bound) | (df_transactions['amount'] > upper_bound)]
+
+print(f"\nStatistical Outlier Limits: {lower_bound:.2f} to {upper_bound:.2f}")
+print(f"Number of outlier transactions found: {len(outliers)}")
+
+# Group by suspect_id and perform multiple aggregations
+suspect_financials = df_transactions.groupby('suspect_id').agg({
+    'amount': 'sum',            # Total spending
+    'transaction_id': 'count'   # Number of transactions
+})
+
+# Rename the columns for clarity as requested
+suspect_financials = suspect_financials.rename(columns={
+    'amount': 'total_spent',
+    'transaction_id': 'num_transactions'
+})
+
+# Display the top of our new features dataframe
+print(suspect_financials.head())
+
+# Create the master table by merging suspects with their financials
+df_master = pd.merge(df_suspects, suspect_financials, on='suspect_id', how='left')
+# Fill NaN values with 0 for suspects with no transaction history
+df_master['total_spent'] = df_master['total_spent'].fillna(0)
+df_master['num_transactions'] = df_master['num_transactions'].fillna(0)
+
+# Verify the merge
+print(df_master.head())
+
+# Task 5: Filtering based on the tip-off (Active Suspects Only)
+df_shortlist = df_master[df_master['num_transactions'] > 20]
+
+# Calculate remaining pool size
+remaining_count = len(df_shortlist)
+
+print(f"Number of suspects remaining: {remaining_count}")
+print("\n--- Final Suspect List ---")
+for name in df_shortlist['name']:
+    print(name)
+
+    # Save the full Master DataFrame (including all suspects) for future reference
+df_master.to_csv('master_suspects.csv', index=False)
+
+print("Master DataFrame successfully saved as 'master_suspects.csv'.")
